@@ -5,8 +5,7 @@
 *.tiff
 *.log
 *.spl
-*.tex
-*.png
+*.texs
 *.docx
 *.Rproj
 *.txt

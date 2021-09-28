@@ -450,7 +450,7 @@ variables in the Random Forest model at the top and the variables that
 contribute the least to the success of the model at the bottom. From
 this plot it is clear that three variables (abrasion, groove shape and
 striae location) most strongly influence the
-model.](McPherron_et_al_machine_learning---Copy_files/figure-gfm/unnamed-chunk-2-1.png)
+model.](md_figures/figure_1.png)
 
 Figure 1. a) A comparison of the classification success rates between
 the random data set sized to match the actual number of cases in the
@@ -505,7 +505,7 @@ greater similarity to one another than to trampling marks (blue
 squares). As such, the cut marks are more difficult to differentiate
 from one another than from trampling marks. The different colored
 regions highlight the class separation decision boundaries of the LDA
-model.](McPherron_et_al_machine_learning---Copy_files/figure-gfm/optional_figure_2_lda_on_simulated_dataset-1.png)
+model.](md_figures/figure_2.png)
 
 Figure 2. Graphical representation of Linear Discriminant Analysis (LDA)
 showing separation of our reconstructed bone surface modification data.
