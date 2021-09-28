@@ -1,0 +1,54 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.tiff
+*.log
+*.pdf
+*.spl
+*.tex
+*.png
+To the Editors.docx
+*.pdf
+*.docx
+AAS*.*
+*.Rproj
+*.txt
+Other Files/*.*
+Revision/*.*
+MDR_et_al_2018_Response_Final.docx
+*.tif
+*.zip
+elsarticle.cls
+mdr-reply.bib
+MDR_et_al_2018_Response_Final.Rmd
+MDR_et_al_2018_Response_Final_revisions.Rmd
+MDR_et_al_2018_Response_Final_revisions_2.Rmd
+MDR_et_al_2018_Response_Final_revisions_2_final.Rmd
+MDR_et_al_2018_Response_Final_revisions_2_final_word.Rmd
+MDR_et_al_2018_Response_Final_revisions_2_Nov_2_2020_WA.Rmd
+MDR_et_al_2018_Response_Final_revisions_2_Nov_2_2020_WA_SPM.Rmd
+MDR_et_al_2018_Response_Final_revisions_2_Nov_2_2020_WA_SPM_SPM.Rmd
+MDR_et_al_2018_Response_Final_revisions_3_final_word.Rmd
+numcompress.sty
+Reviewer Responses.md
+sahla_data.csv
+Untitled/elsevier-harvard-without-titles.csl
+Untitled/elsevier-harvard.csl
+Untitled/elsevier-vancouver.csl
+Untitled/elsevier-with-titles-alphabetical.csl
+Untitled/elsevier-with-titles.csl
+Untitled/elsevier-without-titles.csl
+Untitled/mybibfile.bib
+Untitled/Untitled.Rmd
+Version 4/jhe.csl
+Version 4/McPherron et al. 2021 - Machine learning.Rmd
+Version 4/mcpherron_et_al.bib
+zip_file/jhe.csl
+zip_file/mcpherron_et_al.bib
+zip_file/McPherron_et_al.Rmd
+zip_file_revision 3/jhe.csl
+zip_file_revision 3/mcpherron_et_al.bib
+zip_file_revision 3/McPherron_et_al.Rmd
+2021 June Submission/rmarkdown/ldagraph_Trevor.jpg
+2021 June Submission/ldagraph.jpg

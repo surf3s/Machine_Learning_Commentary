@@ -1,0 +1,548 @@
+---
+title: Short communication - Machine learning, bootstrapping, null models and why we are still not 100%
+  sure which bone surface modifications were made by crocodiles
+author:
+- affiliation: Max Planck Institute for Evolutionary Anthropology
+  email: mcpherron@eva.mpg.de
+  footnote: Corresponding Author
+  name: Shannon P. McPherron
+- affiliation: MPPG,UFS
+  email: will.archer@nasmus.co.za
+  name: Will Archer
+- affiliation: Purdue University
+  email: eoc@purdue.edu
+  name: Erik R. Otárola-Castillo
+- affiliation: Purdue University
+  email: mtorquat@purdue.edu
+  name: Melissa G. Torquato
+- affiliation: Purdue University
+  email: tkeevil@purdue.edu
+  name: Trevor L. Keevil
+date: "`r Sys.Date()`"
+output: rticles::elsevier_article
+address:
+- address: Department of Human Evolution, Max Planck Institute for Evolutionary Anthropology, Leipzig, Germany
+  code: Max Planck Institute for Evolutionary Anthropology
+- address: Max Planck Partner Group, Department of Archaeology and Anthropology, National Museum, Bloemfontein, South Africa
+  code: MPPG
+- address: Department of Geology, University of the Free State, Bloemfontein, South Africa
+  code: UFS
+- address: Department of Anthropology, Purdue University, West Lafayette, Indiana, USA
+  code: Purdue University
+header-includes:
+- \usepackage{lineno}
+- \usepackage{setspace}\doublespacing
+journal: Journal of Human Evolution
+link-citations: yes
+bibliography: McPherron_et_al.bib
+csl: jhe.csl
+subtitle: Which marks were made by crocodiles?
+abstract: |
+  None.
+---
+
+\pagebreak
+\linenumbers
+\doublespacing
+
+```{r setup, include=FALSE, echo=FALSE, message=FALSE}
+
+# This markdown document includes the text and code to replicate our published manuscript.  However,
+# because at some point late in the revisions stage we were obliged to keep a separate Word and markdown 
+# document, despite our best efforts, there may be some differences between the two.
+
+knitr::opts_chunk$set(tidy = FALSE, echo = FALSE, warning = FALSE, message = FALSE)
+options(htmltools.dir.version = FALSE)
+
+# The libraries used here
+library(knitr)
+library(citr)
+library(randomForest)
+library(caret)
+library(e1071)
+library(car)
+library(MASS)
+library(nnet)
+library(dplyr)
+library(gridExtra)
+library(scales)
+library(visreg)
+library(rstudioapi)
+
+# Set to false if the Domínguez-Rodrigo & Baquedano reconstructed raw data are not available.
+# We reconstructed these data from Dominguez Rodrigo et al. (2009).
+rcons_data <- TRUE
+
+# Set to false if not plotting lda model from reconstructed raw data 
+plot.lda <- TRUE
+
+# Set to false if not plotting multinomial model from reconstructed raw data 
+plot.mnm <- TRUE
+
+# Flag to set depending on whether figures and tables are to be embedded in the paper
+# or separate for publication.
+embed_figures = TRUE
+
+# Figure captions go here so that they can be either embedded or listed at the end
+fig_captions = list(length = 3)
+fig_captions[[1]] = "a) A comparison of the classification success rates between the random data set sized to match the actual number of cases in the Domínguez-Rodrigo and Baquedano (2018) data set and the same data set bootstrapped to 10,000 cases (left) and b) A dotchart showing the relative importance, as measured here by the Gini coefficient, of different types of mark observations on the Random Forest model's predictive success (right). The Gini coefficient is essentially a measure of the average importance of a given variable in splitting the mark types relative to the agents that produced them across all the decision trees in the model.  Here these are sorted by the most important variables in the Random Forest model at the top and the variables that contribute the least to the success of the model at the bottom.  From this plot it is clear that three variables (abrasion, groove shape and striae location) most strongly influence the model."
+
+fig_captions[[2]] = "Graphical representation of Linear Discriminant Analysis (LDA) showing separation of our reconstructed bone surface modification data. The LDA correctly recognized the identity of each bone surface modification with an approximate accuracy of 95% (whether they were marks created by retouched or unretouched stone tools, or trampling). Overall, retouched (green triangles) and unretouched (red circles) cut marks exhibit greater similarity to one another than to trampling marks (blue squares). As such, the cut marks are more difficult to differentiate from one another than from trampling marks. The different colored regions highlight the class separation decision boundaries of the LDA model."
+
+```
+
+1. Introduction
+
+Data science and open science are two of the more interesting developments in recent years that influence how research is conducted and disseminated.  Data science generally draws on sophisticated, newly accessible methods of quantitative analysis as applied to large data sets, and this field is rapidly evolving.  Open science represents a drive to make the scientific process, from experimental design and data collection to analysis and publication, more transparent and accessible [@wilkinson_fair_2016].  Here, we argue for the interdependence of these two developments by exploring a paper recently published in the on-going and often contentious debate over the interpretation of bone surface modifications.  We show how an application of machine learning in this instance artificially inflated the success rate of classification [@dominguez-rodrigo_distinguishing_2018] and  obscured a far simpler explanation for the differentiation of marks based on their measurements.  We do this by replicating their study, following the published descriptions of the methods. We simulated our own random and patterned data to generate expectations for the machine learning model provided by the study's authors and analyzed the results. Aside from what our findings might mean for the interpretation of who or what made marks on bones, we use this example to highlight the increasing importance of the open science emphasis on methodological transparency, as more sophisticated data science protocols are brought into paleoanthropology.  
+
+1.1	Background
+
+Machine learning algorithms are becoming increasingly influential in many sciences, and their potential utility is being explored more frequently by archaeologists.  In general, machine learning enables computers to solve scientific problems through learning from data and by improving this learning (often self-correctively), in a semi-autonomous fashion.  This approach allows for the semi-automated detection and modelling of patterns in existing data sets so as to make predictions for new data sets.  Predictive modeling in general is not new, yet machine learning is particularly well-suited to working with data sets that contain large numbers of variables (e.g., tens or 100s of thousands in the case of images), and that may have complex interactions between them (e.g., recognizing a bicycle in an image).  In these situations, many predictive approaches may over-fit.  Overfitting occurs when a GLM is unnecessarily complex. In other words, when a model possesses too many parameters (and predictors) to be reliably estimated  relative to the size of a given data set. In this context, a statistically 'significant'  effect may describe a random error association rather than a true  relationship in the data. Such significant relationships are spurious - usually only specific to the data in hand and not generalizable to the archaeological record. Consequently, overfitting often inflates the predictive accuracy of a model.  Given the large number of variables and the potential for complex interactions between them, machine learning also requires large sample sizes to build (or train) the model.  So, while the statistical fundamentals behind many of these algorithms have been around for several decades or more, it is only relatively recently that the combination of inexpensive computing, accessible software, and massive digital data collection have made possible their widespread use.
+
+However, it is also true about machine learning that while it is straightforward to measure the predictive success of a model, it is much more difficult to understand or visualize how the model itself works, which variables are driving it, how they are interacting with one another, which cases have more leverage, etc.  This is especially problematic in the context of scientific enquiry where understanding causality is as important as predictive success.  Given this situation of a powerful new statistical technique being difficult to describe and understand, in our opinion, the way forward is greater sharing of data (where ethically appropriate) and of the code used to analyze these data [@barnes_publish_2010; @hoffman_reproducibility:_2016; @wilkinson_fair_2016; @marwick_computational_2017].  The combination of data and code allow the results to be reproduced [@marwick_computational_2017] and explored in ways that can lead to a better understanding of issues like causality.  The sharing of code can also lessen the burden of a paper's methods section to fully and precisely describe the steps taken.  To illustrate these points, we consider the recent publication by @dominguez-rodrigo_distinguishing_2018 on the interpretation of bone surface modifications with our own re-analysis of their published data that also includes the code for doing so (see Supplementary Online Material [SOM] for the text and statistical source code used to make this document).
+
+Their paper is largely a reaction to a high-profile paper by Sahle, El Zaatari, and White [-@sahle_hominid_2017] that questions the current emphasis on developing new, sophisticated, quantitative techniques of mark analysis in contrast to building larger comparative samples through new fieldwork and experimentation.  In their paper, @dominguez-rodrigo_distinguishing_2018 apply machine learning algorithms to their own data set of experimental surface modifications on bones produced by trampling, crocodile consumption, and butchery using two types of stone tools (simple and retouched) to show that, with the right statistical techniques, the agent responsible for a surface modification can be identified 100% of the time.  They also apply the same machine learning techniques to mark data published by @sahle_hominid_2017.  In the end, they conclude that there is a "methodological basis to overcome a purported, no longer existent equifinality in the identification of cut marks and crocodile bite marks" (p. 5).  
+
+We agree that new quantitative methods, along with field methods and continued experimentation, are an essential part of moving forward on the challenges presented by the variation exhibited by bone surface modifications [e.g., @harris_trajectory_2017; @mate-gonzalez_application_2019; @OTAROLACASTILLO201856; @pante_new_2017; @yravedra_new_2017; @byeon_automated_2019]. Here, however, we raise some specific methodological considerations with the machine learning application conducted by @dominguez-rodrigo_distinguishing_2018 that could account for the high predictive success rate.  As we demonstrate, it is possible that their classification success rate remains extremely high even after these issues are addressed, but we use this example to illustrate our general point that the decreased transparency of machine learning can hinder scientific understanding, especially in the absence of data and code sharing. 
+
+Our main concern lies with one important aspect of their study: namely, how they created their statistical sample.  Machine learning algorithms require very large samples to initially train the models to recognize the variability associated with a particular attribute (e.g., a crocodile tooth mark).  However, in the field of archaeology where data sharing is still not common practice, and where there are few widely agreed upon protocols for data recording, building large samples is often prohibitively expensive and time consuming.  In their own case, @dominguez-rodrigo_distinguishing_2018 had data recorded from an already reasonably large experimental assemblage consisting of 633 marks, each with up to 17 variables describing them.  Next, "in order to provide the modelling with large training and testing/validation sets, the sample was bootstrapped 10,000 times" (p. 5).  
+
+Bootstrapping is an extremely useful statistical technique when the underlying structure of variability in a data set is unknown or its population is difficult to sample [@efron1994introduction].  Typically, a large number of data sets is created by repeatedly, randomly sampling the original data set with replacement (meaning that individual cases in the original data set can be represented more than once in the bootstrapped data sets).  This new set of assemblages then can be measured using standard descriptive statistics to develop some idea of the likelihood of various outcomes.  For instance, given a set of faunal assemblages comprised of various species, bootstrapping new, hypothetical assemblages by drawing randomly from this original set can give some idea of how (un)likely finding an assemblage of only one of these species would be (e.g., were hominins targeting this particular species or is this simply chance).  Importantly, however, bootstrapping cannot generate new types of observations (e.g., an instance of an assemblage dominated by a species not represented in the original data set).  It can only resample and reshuffle what is already present. In the context of machine learning, bootstrapping can be useful for providing the model with new, additional training sets drawn at random from the original data set. These new training sets will not be larger (in terms of the number of cases) than the original data set from which they are drawn. If instead of making new data sets in this way, @dominguez-rodrigo_distinguishing_2018 instead resampled the experimental data set to 10,000 cases to meet the need of machine learning for large data sets (as the wording of their paper indicates), prior to splitting training and validation samples, they amplified the existing structure of variability in the data and in doing so artificially increased the statistical power (and classification success rate) of the machine learning algorithms.
+
+```{r make_random_dataset}
+
+# Replication of Domínguez-Rodrigo & Baquedano NSR paper
+# applying ML to bone surface modifications.
+# https://www.nature.com/articles/s41598-018-24071-1
+
+# 17 variables with a sample size of 633
+n = 633
+
+set.seed(123)
+
+# Empty dataframe
+cm = data.frame(sample_no = 1:n)
+
+# Build each variable from random data
+cm$v1_groove_traj = sample(1:4, n, replace = TRUE)
+cm$v2_barb = sample(1:2, n, replace = TRUE)
+cm$v3_orientation = sample(1:3, n, replace = TRUE)
+cm$v4_groove_shape = sample(1:3, n, replace = TRUE)
+
+# This variable does not have a way to frame it
+cm$v5_groove_no = sample(1:10, n, replace = TRUE)  
+
+cm$v6_groove_symmetry = sample(1:2, n, replace = TRUE)
+cm$v7_groove_stria = sample(1:2, n, replace = TRUE)
+cm$v8_flaking = sample(1:3, n, replace = TRUE)
+cm$v9_extent_of_flaking = sample(1:2, n, replace = TRUE)
+cm$v9_extent_of_flaking[cm$v8_flaking == 3] = 0
+cm$v10_stria_overlapping = sample(1:2, n, replace = TRUE)
+cm$v11_internal_micro_stria = sample(1:2, n, replace = TRUE)
+cm$v12_micro_stria_traj = sample(1:2, n, replace = TRUE)
+cm$v12_micro_stria_traj[cm$v11_internal_micro_stria==2] = 0
+cm$v13_micro_stria_traj_shape = sample(1:2, n, replace = TRUE)
+cm$v13_micro_stria_traj_shape[cm$v11_internal_micro_stria==2] = 0
+cm$v14_micro_stria_traj_location = sample(1:3, n, replace = TRUE)
+cm$v14_micro_stria_traj_location[cm$v11_internal_micro_stria==2] = 0
+
+# This one too does not have a way to frame it
+# so the length is selected from a uniform distribution
+# of random values between 1 and 3 cm.
+cm$v15_main_groove_length = runif(min = 1, max = 3, n)
+
+cm$v16_assoc_shallow_stria = sample(1:2, n, replace = TRUE)
+cm$v17_assoc_tooth_pits = sample(1:2, n, replace = TRUE)
+
+# This distribution of samples of different mark types replicates the
+# distribution in the original paper.
+cm$Class = c(rep('cut-mark_retouch', 105),
+                rep('cut-mark_simple', 246),
+                rep('trampling', 224),
+                rep('croc', 58))
+cm$Class = factor(cm$Class)
+
+```
+
+```{r bootstrap_the_random_dataset, results = 'hide'}
+
+# Domínguez-Rodrigo & Baquedano state "In the present work, the sample was  initially bootstrapped with a function from the 'caret' R library that considers bootstrapping the sample in proportion to the variable representation to each of the factors of the outcome variable"
+# Lacking more detail we used the upSample() function from caret which 
+# creates a new data set with equal numbers of cases in each category
+# (categories here being the agent that marked the bone).
+
+cm2 = as.data.frame(cm[,2:18])
+pred = cm$Class
+upsampled_cm = upSample(x = cm2, y = pred) 
+
+# This sample is then re-sampled to 10,000 cases
+# as they prescribe to create a large enough sample for ML.
+target_sample_size = 10000
+
+bootstrap_cm = upsampled_cm
+bootstrap_cm[1:target_sample_size,'id'] = 1:target_sample_size
+bootstrap_cm[1:target_sample_size, ] =
+  upsampled_cm[sample(1:nrow(upsampled_cm),
+                      target_sample_size, replace = TRUE),]
+
+# Remove ID variables
+bootstrap_cm = bootstrap_cm[,-c(19)]
+cm = cm[,-c(1)]
+
+```
+
+```{r apply_machine_learning_to_the_random_dataset, results = 'hide', echo = FALSE}
+# And here begins the Machine Learning analysis
+
+# Create a training/test sample split of 70/30
+training_data = which(sample(2, nrow(cm),
+                         replace = TRUE, prob = c(0.7, 0.3)) == 1)
+
+# First apply ML to the original data set
+cm_result = train(cm[,1:17], cm[,18],
+               method = "rf",
+               preProcess = c("center", "scale"),
+               tuneLength = 10,
+               tuneGrid = expand.grid(.mtry = sqrt(17)),
+               metric = "Accuracy",
+               trControl = trainControl(method = "repeatedcv",
+                                        number = 10, repeats = 3),
+               subset = training_data)
+
+cm_average_success = round(cm_result$results$Accuracy * 100, 2)
+
+# Take a look at the success by category
+breakdown = as.table(cm_result$finalModel$confusion)
+colnames(breakdown) = c('Pred. Croc.','Pred. CM Ret.',
+                        'Pred. CM Simple','Pred. Trampling','Error Rate')
+rownames(breakdown) = c('Crocodile','Cutmark Retouched',
+                        'Cutmark Simple','Trampling')
+breakdown[,1:4] = round(breakdown[,1:4], 0)
+breakdown[,5] = round(breakdown[,5], 2)
+
+# Now look at the same data bootstrapped to 10000 cases
+training_data = which(sample(2, nrow(bootstrap_cm),
+                         replace = TRUE, prob = c(0.7, 0.3)) == 1)
+
+bootstrap_result = train(bootstrap_cm[,1:17], bootstrap_cm[,18],
+               method = "rf",
+               preProcess = c("center", "scale"),
+               tuneLength = 10,
+               tuneGrid = expand.grid(.mtry = sqrt(17)),
+               metric = "Accuracy",
+               trControl = trainControl(method = "repeatedcv",
+                                        number = 10, repeats = 3),
+               subset = training_data)
+
+bootstap_average_success = round(bootstrap_result$results$Accuracy * 100, 2)
+
+success_rates = rbind(cm_result$results, bootstrap_result$results)
+success_rates$dataset = c('Original','Bootstrap')
+success_rates$dataset = factor(success_rates$dataset, levels = c('Original','Bootstrap'))
+success_rates = success_rates[, c('Accuracy', 'AccuracySD', 'dataset')]
+success_rates[,1:2] = round(success_rates[,1:2] * 100, 2)
+
+```
+
+2. Methods and results
+
+To assess the performance of Dominguez-Rodrigo and Baquedano's [-@dominguez-rodrigo_distinguishing_2018] machine learning techniques, first, we evaluated the outcomes of bootstrapping random data. We then modeled their published experimental data using machine learning to compare the results with those of more conventional approaches. 
+
+2.1. Bootstrapping Random Data
+
+We demonstrate the impact of bootstrapping as used by @dominguez-rodrigo_distinguishing_2018 on classification success rate by replicating their study using a data set that machine learning should not be able to classify correctly.  We generated a new data set that conforms to the structure of their data in terms of the number variables recorded for each bone surface modification and in terms of the types of observations made for each of these variables (see Supplementary Information [SI] in @dominguez-rodrigo_distinguishing_2018). However, rather than actual observations on bone surface modifications, we used entirely random data. So, for example, where @dominguez-rodrigo_distinguishing_2018 categorize groove symmetry as symmetrical or asymmetrical, we assigned a random number of either 1 or 2 (treated as categorical in the analysis), respectively.  We represent the categories of this variable, symmetric or asymmetric, by the numbers 1 and 2.  However, our analyses effectively treat the variable as categorical.  Of their 17 variables, 15 are of this type, where the observations fall into one of a few categories. Two variables, mark length and the number of marks per bone, required a different approach.  For mark length, we assigned a random value from a uniform distribution ranging from 1 to 3 cm.  For the number of marks per bone, we assigned a random value from a uniform distribution of 1 to 10.  We then generated an initial data set of `r nrow(lm)` cases of random observations and assigned them to crocodile, trampling, simple cut-mark, and complex cut-mark agents, in proportion to the @dominguez-rodrigo_distinguishing_2018 experimental sample (`r length(which(cm$Class=='croc'))`, `r length(which(cm$Class=='trampling'))`, `r length(which(cm$Class=='cut-mark_simple'))`, and `r length(which(cm$Class=='cut-mark_retouch'))` marks, respectively).  
+
+Doing our best to follow the protocol described by @dominguez-rodrigo_distinguishing_2018, we then resampled or bootstrapped these data to generate a new data set of 10,000 cases.  However, there are several ways this could be done, and how exactly they did it is not clear in their protocol description.  @dominguez-rodrigo_distinguishing_2018 state only that "the sample was initially bootstrapped with a function from the 'caret' R library that considers bootstrapping the sample in proportion to the variable representation to each of the factors of the outcome variable" (p. 5). Not knowing exactly which function they used but taking as our guide the emphasis on variable representation, we chose from the caret library [@kuhn_caret_2020] the upSample() function which creates an equal number of samples in each category (here the type of mark) by randomly resampling the less well represented categories until they equal the best represented category (here simple cutmarked bones).  Finally, we resampled this data set to 10,000 cases using a bootstrap with replacement. We note that bootstrapping directly to 10,000 cases without first using the upSample() step does not change the results reported here.
+
+Following @dominguez-rodrigo_distinguishing_2018, we applied the Random Forest machine learning algorithm to our simulated random and bootstrapped data. Random Forest is one of eight algorithms tested by @dominguez-rodrigo_distinguishing_2018. Of the eight algorithms they tested, five achieved 100% classification success on the full data set, and of these, four performed equally well (each with 99% success) on a reduced variable data set. Random Forest is among these four. To use Random Forest on our bootstrapped random data, we first divided it into a training set and an independent validation set using a 70/30 respective split (all statistics used here were computed in R v. 4.0.5 [@r_core_team_r_2021]). We then used the caret() library [@kuhn_caret_2020] to create a model of the training sample (7000 cases). When we applied our Random Forest model to the validation data set, the classification success rate was `r bootstap_average_success`% (Fig. 1a), which fully replicates the results reported by @dominguez-rodrigo_distinguishing_2018.
+
+The effect of the bootstrapping step on this result is clear when we apply the same machine learning algorithm to our initial data set of non-bootstrapped random data composed of `r nrow(lm)` cases.  Here, after using the same 70/30 training/validation sampling, an average of `r cm_average_success`% of the cases in the validation sample were correctly classified (Fig. 1a). This classification success rate is above what we would expect by chance alone (1:4 or 25%), because the mark types are unevenly proportioned in the original data.  Naturally, marks that are better represented in the sample are correctly classified more of the time (Table 1). This sample case illustrates the potential for artificial inflation of group differences when bootstrapping is applied to increase sample sizes.
+
+```{r echo = FALSE}
+
+# Build Fig. 1a showing the results on the random data set.
+# Save this figure and display it later with the figure showing
+# the Random Forest model results.  This is done just to save
+# space in the final output.
+
+p = ggplot(success_rates, aes(x = dataset, y = Accuracy, group = 1)) 
+p = p + geom_point(shape = 21, size = 3,
+                   colour = 'black', fill = 'red', alpha = 0.5)
+p = p + geom_errorbar(width = .1, aes(ymin = Accuracy - AccuracySD,
+                                      ymax = Accuracy + AccuracySD)) 
+p = p + annotate("text", x = 1, y = -4,
+                 label = paste("N = ", nrow(cm), sep = '')) 
+p = p + annotate("text", x = 2, y = -4,
+                 label = paste("N = ", nrow(bootstrap_cm), sep = '')) 
+p = p + labs(x = "",
+             y= paste("Percent classification success")) 
+p = p + theme_minimal()
+p = p + theme(legend.position="none")
+p = p + theme(panel.grid.minor = element_blank())
+p = p + labs(tag = 'A')
+p = p + theme(plot.tag.position = c(.01,.98))
+figure1a = p + theme(panel.grid.major.x = element_blank())
+
+```
+
+\small
+```{r breakdown_table, results = 'asis', echo=FALSE}
+
+# When knitting to Word use the following statement.  
+# Otherwise the one after works with PDFs.
+#print(kable(breakdown, caption = 'Breakdown of classification success rate on the  original-sized random data set.  In this table, rows represent the actual mark type we assigned and columns represent the predicted mark type based on the Random Forest model.  Mark types that are better represented in the random data set are more often correctly classified.'), comment = FALSE) 
+
+kable(breakdown, caption = 'Breakdown of classification success rate on the  original-sized random data set.  In this table, rows represent the actual mark type we assigned and columns represent the predicted (Pred.) mark type based on the Random Forest model.  Mark types that are better represented in the random data set (e.g., simple cutmarks and trampling marks) more often correctly (i.e., have the lowest error rate).')
+
+```
+\normalsize
+
+Doing this may inadvertently generate misleading patterns when applied to the archaeological record.  For example, having established that machine learning and bootstrapping successfully determined the agent of bone modification in their experimental data set, @dominguez-rodrigo_distinguishing_2018 apply the same methodology to the archaeological data published by Sahle et al. (2017).  Their conclusion is that crocodile marks can be distinguished from butchery marks and that marks on three of four fossil bones look more like they were made from butchery than by crocodiles.  The published data set (Table 1 of the SI of Sahle et al. 2017) consists of nine cases (marks on four fossil bones, marks from four crocodile experiments, and marks from one butchery experiment) described by 12 variables, with no indications of variance or sample size.  In this case a "...random forest (RF) was used on a slightly bootstrapped sample (*n* = 100) of the experimental data set of Sahle et al.´s [1] Table 1, and excluding the fossil bones" (SI, Domínguez-Rodrigo and Baquedano [2018]).  In other words, five cases were resampled to 100 and "...this bootstrapped sample yielded a classification of crocodile [bone surface modifications] and butchery [bone surface modifications] with an accuracy of 100%..." (SI, Domínguez-Rodrigo and Baquedano [2018]).  @dominguez-rodrigo_distinguishing_2018 present multivariate plots (see their SI Fig. S2) indicating that mark maximum width ('mw') is the sole variable driving the distinction of crocodile tooth marks from stone tool butchery marks. When one considers the mark maximum width values for the four crocodile tooth-marked bones and the one butchery-marked bone in the @sahle_hominid_2017 data set, it is clear why: the experimental butchery marks are wider than any of the crocodile tooth marks, and bootstrapping to augment a sample with such limited variation allows a complete separation of the cases on this variable. @dominguez-rodrigo_distinguishing_2018 go on to build a multivariate machine learning model using eight predictor variables from the five experimental cases. This model is then used to predict whether the marks on four fossil bones are the results of crocodiles or butchery activity.  Whether resampling was used in this case is not stated, but the classification probabilities are less than 100% (roughly 80–20 in this case).
+
+Importantly, when it comes to issues of sample size, bootstrapping existing data cannot be used as a substitute for collecting more actual data. Nonetheless, the methods as presented by @dominguez-rodrigo_distinguishing_2018 do not demonstrate the efficacy of machine learning for improving the classification of bone surface modifications relative to more conventional predictive modelling approaches.  In our view, given the difficulty of separating trampling marks from stone-tool cutmarks (both of which are made by sharp stones), 100% classification success rates seemed an unlikely possibility.  Moreover, data scientists often suspect that overfitting, rather than a general model, might underlie such perfectly classified outcomes of machine and deep learning algorithms [@bilbao_overfitting_2017, @nichols_machine_2019]. Consequently, we are still left with the question, can machine learning methods outperform more conventional statistical techniques? To answer this, we evaluated the effectiveness of machine learning over more conventional approaches such as Discriminant Function Analysis (DFA) and Multinomial Regression (a likelihood-based generalized linear model).
+
+2.2. Comparing machine learning and "conventional" methods
+
+```{r machine_learning_on_mdr_dataset, results = 'hide'}
+
+if (rcons_data) {
+  #Load data set
+  set.seed(1234)
+  source('./BSMsimData_signal.R')
+  marks <- gen.data
+  
+  # remove "v5_groove_no","v15_main_groove_length", "v17_assoc_tooth_pits"
+  marks<-marks[,-c(6,16,18)]
+  marks$Class = factor(marks$Class)
+  
+  # Setup a 70/30 training and validation split
+  sample.ind = sample(2, nrow(marks), replace = TRUE, prob = c(0.7, 0.3))  
+  data.dev = marks[,][sample.ind==1,]  # make training sample
+  data.val = marks[,][sample.ind==2,]  # make validation (i.e. test) sample
+  
+  res = randomForest(Class ~ ., ntree = 100, data = data.dev) # Fit model to training data
+  data.val$predicted.response = predict(res, data.val)        # Predictions for validation data
+  
+  # Check validation success
+  validation_suc = (length(which(data.val$predicted.response == data.val$Class))/nrow(data.val))*100
+  
+  # Fit RF with reduced number of predictors (i.e. those that contribute highly in the variance importantce plot)
+  
+   #abrasion, striae.location and grooveshape
+  res_reduced = randomForest(Class ~ ., ntree = 100, data = data.dev[,c(1,5,14,15)])
+
+  data.val$predicted.response = predict(res_reduced, data.val)
+  
+  ml_reduced_success = (length(which(data.val$predicted.response == data.val$Class))/nrow(data.val)) * 100
+
+ # Fit RF with best single predictor (i.e. one that contribute highly in the variance importantce plot)
+  
+  #abrasion
+  res_reduced_one = randomForest(Class ~ ., ntree = 100, data = data.dev[,c(1,15)])
+
+  data.val$predicted.response_one = predict(res_reduced_one, data.val)
+  
+  ml_reduced_one_success = (length(which(data.val$predicted.response_one == data.val$Class))/nrow(data.val)) * 100
+  
+} else {
+   ml_reduced_success = NA
+   ml_reduced_one_success = NA
+}
+
+```
+
+To compare the performance of machine learning to more conventional statistical methods, we re-analyzed a portion of the experimental data set used by @dominguez-rodrigo_distinguishing_2018 and published by Dominguez-Rodrigo et al. [-@dominguez-rodrigo_new_2009-2, their Table 5]. We conducted our analyses using their machine learning methods, DFA and a likelihood-based GLM. Results of our re-analyses shows that near 100% classification success is still possible using machine learning and the more conventional methods. Because Dominguez-Rodrigo and Baquedano’s [-@dominguez-rodrigo_distinguishing_2018] original data were not available to us for re-analysis—beyond replication—we conducted a statistical reconstruction of the data set using their published summaries. With access to this information, we examined what is driving their results, to achieve a better causal understanding.
+
+The data set for our re-analysis contains nearly all of Domínguez-Rodrigo and Baquedano’s [-@dominguez-rodrigo_distinguishing_2018] cases for the two types of butchery (with retouched and non-retouched tools) and trampling marks. However, the crocodile tooth mark cases are not published in comparable detail to the butchery cases and thus could not be included. Dominguez-Rodrigo et al. [-@dominguez-rodrigo_new_2009-2, their Table 5] summarize the percentages of 14 of the 17 variables later used by @dominguez-rodrigo_distinguishing_2018. Each variable is composed of multiple categories – sometimes two or three. For example, the variable named ‘Groove Trajectory’ is made up of three categories: straight, curvy, and sinuous. On the other hand, the variable “Barb” is comprised of two observable categories: its presence and absence. In addition, several variables are dependent on the state of another. For instance, “microstriation trajectory”, “shape of microstriation trajectory”, and “location of microstration”, depend on whether the variable named “internal microstriation” is “present” or “absent”. [@dominguez-rodrigo_new_2009-2, their Table 5] do not include three variables used by @dominguez-rodrigo_distinguishing_2018: “number of conspicuous grooves”, “main groove length,” and “associated tooth pits on mid-shafts”, and thus we could not analyze them here. @dominguez-rodrigo_distinguishing_2018 call these variables 5, 15, and 17. The authors describe these variables in text [@dominguez-rodrigo_new_2009-2] and their supplementary materials [@dominguez-rodrigo_distinguishing_2018].
+
+The reported percentages of the variables’ categories among the experimental unretouched, retouched, and trampled marks capture the major patterns in the data analyzed by @dominguez-rodrigo_distinguishing_2018. Consequently, we modeled the outcomes of each variable’s categories as a multinomial random variable. The multinomial distribution is a natural statistical model of events determined by an underlying vector of proportions – such as these data. The data generation process and data reconstruction are described in SOM (BSMsimData_signal.R). Our reconstruction replicates a data matrix similar to that used by @dominguez-rodrigo_distinguishing_2018 and is composed of a total 575 unretouched and retouched butchery and trampling cases (105, 246, and 224 respectively).
+
+We then fit a Random Forest model to the reconstructed data.  From this model, we made a dotchart using the 'varImpPlot' function from the randomForest package [@liaw_classification_2002] to assess the hierarchy of variable importance and noted that associated shallow striation (abrasion), groove shape and striae trajectory location (variables 16, 4, and 14) are overwhelmingly more important than the other 14 variables used by @dominguez-rodrigo_distinguishing_2018 to build their model. We provide here the variable importance plot for illustrative purposes (Fig. 1b), and we note that one variable, abrasion, is ~`r round(ml_reduced_one_success, 1)`% successful at separating trampled bones from cut-marked bones in the data set.  The two other variables, groove shape and striae location, separate marks from retouched and non-retouched tools.  Thus, we fitted a new Random Forest model using just these three variables of abrasion, groove shape and striae location. With this drastically reduced Random Forest model we achieved a classification success rate of ~`r round(ml_reduced_success, 1)`%, calling into question the utility of the 11 other descriptive variables (and the three  variables we were unable to model) used by @dominguez-rodrigo_distinguishing_2018.
+
+
+```{r fig.cap = fig_captions[[1]], echo = FALSE}
+  
+if (rcons_data == TRUE) {
+  mdg = data.frame(varImp(res))
+  mdg$MarkType = rownames(mdg)
+  mdg = mdg %>% arrange(Overall)
+  mdg$MarkType = factor(mdg$MarkType, levels = mdg$MarkType)
+  
+  p = ggplot(mdg, aes(Overall, MarkType))
+  p = p + geom_point() 
+  p = p + xlab('Mean Decrease\nGini')
+  p = p + ylab('Mark Observation')
+  p = p + labs(tag = 'B')
+  p = p + theme(plot.tag.position = c(.01,.98))
+  figure1b = p + theme_minimal()
+}
+
+if (!embed_figures) {
+  cat('[place Figure 1 here]')
+  tiff('figure_01.tif', res = 300, width = 7, height = 4, units = 'in') }
+
+if (rcons_data) {
+  grid.arrange(figure1a, figure1b, nrow = 1) 
+} else {
+  figure1a
+}
+
+if (!embed_figures) graphics.off()
+
+```
+
+```{r linear_modeling_on_mdr_dataset, results = 'hide'}
+
+if (rcons_data) {
+
+  #for replication
+  set.seed(406)
+  
+  #this randomly selects 70% of sample for training, considering the proportion of all classes
+  trainIndex = createDataPartition(marks$Class, p = .70, list = FALSE)
+
+  #-----------------------------
+  # DFA
+  
+  # Model mark types using LDA, specify that "trainIndex" points to cases
+  # to be used in the training sample
+  mod1 = lda(marks$Class ~ ., data = marks, prior = c(1,1,1)/3, subset = trainIndex)
+  
+  # Predict mark types using LDA model
+  predict(mod1, marks[-trainIndex, ])$class
+  
+  # Count how many mark types from testing data set are correctly predicted by training LDA
+  lda_success = sum(marks[-trainIndex,1 ] == predict(mod1, marks[-trainIndex, ])$class) / length(marks[-trainIndex, 1]) * 100
+  
+  #-----------------------------
+  # MULTINOMIAL GLM
+  atrain = marks[trainIndex,] # create training data set using MDR&B's original training index
+  atest = marks[-trainIndex,] # create independent testing data set using MDR&B's original training index
+  
+  # Create multinomial GLM (using maximum likelihood)to model and then predict mark types, using training data set
+  mod2 = multinom(Class ~., data = atrain)
+  
+  # Use multinomial GLM to predict mark types from independent testing data
+  predict(object = mod2, newdata = atest)
+  
+  # Count how many mark types from testing data set are correctly predicted by training GLM
+  glm_success = sum(atest[, 1] == predict(object = mod2, newdata = atest)) / length(atest[, 1]) * 100
+  
+  #-----------------------------
+  # LDA with only two predictor variables, abrasion  + striae.location attaining 98% accuracy
+  mod3 = lda(marks$Class ~ v16_assoc_shallow_stria + v14_micro_stria_traj_location, data = marks, prior = c(1,1,1) / 3, subset = trainIndex)
+  
+  # Predict mark types using LDA model
+  predict(mod3, marks[-trainIndex, ])$class
+  
+  # Count how many mark types from testing data set are correctly predicted by training LDA
+  lda_reduced_success = sum(marks[-trainIndex, 1] == predict(mod3, marks[-trainIndex, ])$class) / length(marks[-trainIndex,1 ]) * 100
+  
+  #-----------------------------
+  # GLM with only two predictor variables, abrasion  + striae.location, attaining 98% accuracy
+  # Create multinomial GLM (using maximum likelihood) to model and then predict mark types, using training data set
+  mod4 = multinom(Class ~ v16_assoc_shallow_stria + v14_micro_stria_traj_location, data = atrain, trace=FALSE)
+  
+  # use multinomial GLM to predict mark types from independent testing data
+  predict(object = mod4, newdata = atest)
+  
+  # Count how many mark types from testing data set are correctly predicted by training GLM
+  glm_reduced_success = sum(atest[,1 ] == predict(object = mod4, newdata = atest)) / length(atest[,1 ]) * 100
+
+} else {
+  lda_success = NA
+  glm_success = NA
+  lda_reduced_success = NA
+  glm_reduced_success = NA
+}
+  
+
+```
+
+As an alternative to machine learning, given that the structure of variability in the data is simpler than initially imagined, we also modeled these data using standard multivariate statistical models.  To do so, we again started by subsampling the reconstructed data set into 70/30 training/testing data sets.  To create predictive models of mark type, we used traditional LDA using the lda function of the MASS package [@venables_modern_2002-1] in R [@r_core_team_r_2021].  We also modeled mark type using a Multinomial GLM. In the GLM, Maximum Likelihood achieved parameter estimates. To generate the GLM, we used the multinom function from the nnet package which, although it is built to construct artificial neural networks, defaults to a maximum likelihood fit, thus making it a GLM by definition [@venables_modern_2002-1].  We created the LDA and GLM models using only the training data set. We then used the independent test data and the estimated coefficients of each model to predict the type of mark based on their individual combination of 14 variables. The LDA model was able to predict the marks from the independent testing sample with ~`r round(lda_success,1)`% accuracy (Figure 2). The GLM performed slightly better, achieving an accuracy of `r round(glm_success,1)`%. The accuracy of these models is quite similar to the machine learning results reported by @dominguez-rodrigo_distinguishing_2018 and partially replicated here.  Lastly, as with our machine learning replication, we applied the models on a reduced set of variables. After carefully considering the influence of each of the 14 variables, we included only two variables: abrasion and striae location.  These simpler models predicted mark type with ~`r round(lda_reduced_success,1)`% (LDA) and ~`r round(glm_reduced_success,1)`% (GLM) accuracy. 
+
+
+```{r optional_figure_2_lda_on_simulated_dataset, fig.cap = fig_captions[[2]], echo = FALSE}
+
+if (plot.lda){
+  data.dev$Class <- factor(data.dev$Class, levels = c("unretouched", "retouched", "trampling"))
+  ldamod <-  lda(data.dev$Class ~ ., data = data.dev, prior = c(1,1,1)/3)
+  lda_graphmaker <- function(fit){
+
+  datPred <- data.frame(BSM=predict(fit)$class, predict(fit)$x)
+
+  fit2 <- lda(BSM ~ LD1 + LD2, data=datPred, prior = rep(1, 3)/3)
+
+  ld1lim <- expand_range(c(min(datPred$LD1),max(datPred$LD1)),mul=0.05)
+  ld2lim <- expand_range(c(min(datPred$LD2),max(datPred$LD2)),mul=0.05)
+  ld1 <- seq(-6.8, 11.5, length.out=1000)
+  ld2 <- seq(-6.8, 6, length.out=1000)
+  newdat <- expand.grid(list(LD1=ld1,LD2=ld2))
+  preds <-predict(fit2,newdata=newdat)
+  predclass <- preds$class
+  postprob <- preds$posterior
+  df <- data.frame(x=newdat$LD1, y=newdat$LD2, class=predclass)
+  df$classnum <- as.numeric(df$class)
+  df <- cbind(df,postprob)
+  head(df)
+
+  colorfun <- function(n,l=65,c=100) { hues = seq(15, 375, length=n+1); hcl(h=hues, l=l, c=c)[1:n] } # default ggplot2 colours
+  colors <- colorfun(3)
+  colorslight <- colorfun(3,l=90,c=50)
+  
+  ggplot(datPred, aes(x=LD1, y=LD2) ) +
+    geom_raster(data=df, aes(x=x, y=y, fill = factor(class)),alpha=0.7, show.legend = FALSE) +
+    geom_contour(data=df, aes(x=x, y=y, z=classnum), colour="black", alpha=0.5, breaks=c(1.5,2.5)) +
+    geom_point(data = datPred, size = 2.5, aes(pch = BSM,  colour=BSM)) +
+    scale_x_continuous(limits = c(-6.8, 11.5), expand=c(0,0),breaks = c(-6, -4,-2,0,2,4,6,8, 10)) +
+    scale_y_continuous(limits = c(-6.8, 6), expand=c(0,0), breaks = c(-6,-4,-2,0,2,4,6)) +
+    scale_fill_manual(values=colorslight, guide=F)+
+    theme(aspect.ratio = 0.69945355191)
+
+  }
+
+figure2 <- lda_graphmaker(ldamod)
+}
+
+if (!embed_figures) {
+  cat('[place optional Figure 2 here]')
+  tiff('figure_02.tif', res = 300, width = 7, height = 4, units = 'in') }
+
+figure2
+
+if (!embed_figures) graphics.off()
+
+```
+
+
+3.  Discussion and conclusions
+
+We have tried to show here that the relative novelty of machine learning methods in archaeology, and their complexity in general, make it difficult to evaluate the appropriateness of their application.  It is not our intention to call into question the general use of machine learning but rather to emphasize that moving forward, the efficient evaluation and replication of these types of papers will, in many cases, require access to the original data sets in addition to the detailed associated methods descriptions (i.e., the scripts or a description thereof), which are now more commonly published alongside archaeology papers [e.g., @clarkson_archaeology_2015-1; @mcpherron_additional_2018-1; @miller-atkins_time-averaging_2018; @calandra_back_2019; @reeves_measuring_2019; @mraz_thermal_2019-1; @coco_effects_2020; @mcpherron_introducing_2020].  
+
+In the absence of this methodological detail, we have presented another approach to gaining insights into the appropriateness of a particular statistical method by building a null expectation using random data.  In doing so, we have demonstrated that, as it was described, Domínguez-Rodrigo and Baquedano's application of machine learning to their experimental data produces results that are indistinguishable from the null model, and we think that because of the small sample size of the data set (nine rows of data) in the @sahle_hominid_2017, resampling as applied by @dominguez-rodrigo_distinguishing_2018 is likely to produce an inaccurate result, similar to what we demonstrated here with random data.
+
+For archaeologists, the main goal of predictive modelling is to develop a tool that can generalize reliably to unknown archaeological cases, in other words, a model that can make good predictions. This is conventionally assessed with a so-called out-of-bag test sample of data, which is left aside for validation purposes when the predictive model is built with a training sample of data. In the approach of Domínguez-Rodrigo and Baquedano (2018), our understanding is that the test portion of data was subjected to the same process of resampling as the training data, artificially inflating the success of prediction, and making the out-of-sample performance of the model challenging to evaluate.
+
+Through our statistical reconstruction of Domínguez-Rodrigo and Baquedano's data set, we also demonstrated that the pattern in their experimental data is driven by only two or three variables, rather than 14, with the presence or absence of abrasion having the highest importance. In other words, the application of machine learning in this case obscured our understanding of how bone surface modifications are linked to agents.  Minimally, the classification success rate on the original data set of `r nrow(lm)` cases and a variable importance plot would have been important statistics for @dominguez-rodrigo_distinguishing_2018 to report. In their absence, once the full data set is published, we will have a better idea how sure we can be that it was a crocodile that marked the bone and why we think so.
+
+Acknowledgements
+===========
+
+We thank David Braun, Jordy Orellana Figueroa, Philipp Gunz, Jacob Harris, Curtis Marean, Luke Premo, Jonathan Reeves, Claudio Tennie and others for reading and providing their insights into previous versions of this manuscript. Manuel Domínguez-Rodrigo and Enrique Baquedano shared their data with us to replicate their original analyses and engaged in open discussions and correspondence about this paper prior to submission.  While it is normal to thank the reviewers and editors for their help with a manuscript, in this case we want to particularly acknowledge the efforts made by these individuals.  From detailed edits to thought provoking comments and suggestions, they helped make this paper much better than where it started.  As always, though, all mistakes remain our own.
+
+
+```{r results = 'asis'}
+
+if (!embed_figures) {
+  cat('Figures  \n')
+  cat('===========\n')
+  for (i in 1:length(fig_captions)) {
+    cat("**Figure ",i,"**.  ", fig_captions[[i]],"  \n", sep = '')
+  }
+}
+
+```
+
+
+References {#references .unnumbered}
+===========
