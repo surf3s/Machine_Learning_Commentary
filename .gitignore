@@ -4,13 +4,12 @@
 .Ruserdata
 *.tiff
 *.log
-*.pdf
 *.spl
 *.tex
 *.png
-*.pdf
 *.docx
 *.Rproj
 *.txt
 *.tif
 *.zip
+McPherron_et_al_machine_learning - pdf.rmd
