@@ -19,7 +19,7 @@ author:
   email: tkeevil@purdue.edu
   name: Trevor L. Keevil
 date: "`r Sys.Date()`"
-output: rticles::elsevier_article
+output: html_document
 address:
 - address: Department of Human Evolution, Max Planck Institute for Evolutionary Anthropology, Leipzig, Germany
   code: Max Planck Institute for Evolutionary Anthropology
